@@ -3,16 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ICT Auto Chart</title>
-
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<title>ICT Pro Chart</title>
 
 <style>
     body {
         margin: 0;
-        font-family: Arial;
         background: #000;
-        color: white;
+        color: #fff;
+        font-family: Arial;
     }
 
     .top {
@@ -32,9 +30,19 @@
         border-radius: 5px;
     }
 
-    #chart {
+    #tvchart {
         width: 100%;
         height: calc(100vh - 70px);
+        position: relative;
+    }
+
+    #overlayCanvas {
+        position: absolute;
+        top: 0; 
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none; /* important! */
     }
 </style>
 </head>
@@ -48,175 +56,85 @@
     <button onclick="loadSymbol('ETHUSDT')">ETH</button>
 </div>
 
-<div id="chart"></div>
+<div id="tvchart">
+    <div id="tradingview_chart" style="width:100%; height:100%"></div>
+    <canvas id="overlayCanvas"></canvas>
+</div>
+
+<script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
 
 <script>
-/* ---------------------- AUTO THEME ---------------------- */
-function getTheme() {
-    let hour = new Date().getHours();
-    return (hour >= 7 && hour <= 18) ? "light" : "dark";
+
+// -------- AUTO THEME --------
+function autoTheme() {
+    let h = new Date().getHours();
+    return (h >= 7 && h <= 18) ? "light" : "dark";
 }
 
-let chart = LightweightCharts.createChart(document.getElementById('chart'), {
-    layout: {
-        background: { color: getTheme() === "dark" ? "#000" : "#fff" },
-        textColor: getTheme() === "dark" ? "#fff" : "#000",
-    },
-    grid: {
-        vertLines: { color: "#222" },
-        horzLines: { color: "#222" }
-    },
-    timeScale: { timeVisible: true, secondsVisible: false }
-});
+let tvWidget = null;
+let overlayCanvas = document.getElementById("overlayCanvas");
+let ctx = overlayCanvas.getContext("2d");
 
-let candleSeries = chart.addCandlestickSeries();
-
-/* ---------------------- LOAD DATA ---------------------- */
-async function loadSymbol(symbol) {
-    let candles = [];
-
-    if (symbol === "BTCUSDT" || symbol === "ETHUSDT") {
-        const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=15m&limit=500`;
-        const raw = await fetch(url).then(r => r.json());
-        candles = raw.map(c => ({
-            time: c[0] / 1000,
-            open: +c[1],
-            high: +c[2],
-            low: +c[3],
-            close: +c[4]
-        }));
-    } 
-    else {
-        const url = "https://financialmodelingprep.com/api/v3/historical-chart/15min/" 
-                    + (symbol === "XAUUSD" ? "XAUUSD" : "XAGUSD") 
-                    + "?apikey=demo";
-        const raw = await fetch(url).then(r => r.json());
-        candles = raw.reverse().map(c => ({
-            time: Math.floor(new Date(c.date).getTime() / 1000),
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close
-        }));
-    }
-
-    candleSeries.setData(candles);
-    drawFVG(candles);
-    drawOrderBlocks(candles);
-    drawLiquidity(candles);
-    drawSMC(candles);
+// resize canvas automatically
+function resizeCanvas() {
+    overlayCanvas.width = overlayCanvas.clientWidth;
+    overlayCanvas.height = overlayCanvas.clientHeight;
 }
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 
-/* ---------------------- AUTO FVG ---------------------- */
-function drawFVG(c) {
-    for (let i = 2; i < c.length; i++) {
-        let A = c[i-2], B = c[i-1], C = c[i];
 
-        // Bullish FVG
-        if (A.high < C.low) {
-            candleSeries.setMarkers([{
-                time: C.time,
-                position: 'aboveBar',
-                color: 'lime',
-                shape: 'circle',
-                text: 'FVG↑'
-            }]);
-        }
+// -------- LOAD SYMBOL ON TRADINGVIEW --------
+function loadSymbol(symbol){
+    let theme = autoTheme();
 
-        // Bearish FVG
-        if (A.low > C.high) {
-            candleSeries.setMarkers([{
-                time: C.time,
-                position: 'belowBar',
-                color: 'red',
-                shape: 'circle',
-                text: 'FVG↓'
-            }]);
-        }
-    }
-}
+    // Clear previous chart
+    document.getElementById("tradingview_chart").innerHTML = "";
 
-/* ---------------------- ORDER BLOCK ---------------------- */
-function drawOrderBlocks(c) {
-    for (let i = 1; i < c.length; i++) {
-        let prev = c[i - 1];
-        let cur = c[i];
-
-        if (prev.close > prev.open && cur.close < cur.open) {
-            // Bearish OB
-            candleSeries.setMarkers([{
-                time: cur.time,
-                position: 'belowBar',
-                color: 'orange',
-                shape: 'square',
-                text: 'OB↓'
-            }]);
-        }
-
-        if (prev.close < prev.open && cur.close > cur.open) {
-            // Bullish OB
-            candleSeries.setMarkers([{
-                time: cur.time,
-                position: 'aboveBar',
-                color: 'cyan',
-                shape: 'square',
-                text: 'OB↑'
-            }]);
-        }
-    }
-}
-
-/* ---------------------- LIQUIDITY ---------------------- */
-function drawLiquidity(c) {
-    let highs = c.map(x => x.high);
-    let lows = c.map(x => x.low);
-
-    let eqh = Math.max(...highs);
-    let eql = Math.min(...lows);
-
-    chart.addHorizontalLine(eqh, {
-        color: "cyan",
-        lineWidth: 2,
-        lineStyle: 2
+    tvWidget = new TradingView.widget({
+        "width": "100%",
+        "height": "100%",
+        "symbol": symbol,
+        "interval": "15",
+        "timezone": "Asia/Kolkata",
+        "theme": theme,
+        "style": "1",
+        "locale": "en",
+        "container_id": "tradingview_chart"
     });
 
-    chart.addHorizontalLine(eql, {
-        color: "magenta",
-        lineWidth: 2,
-        lineStyle: 2
-    });
+    // After chart loads → call data engine
+    setTimeout(() => {
+        fetchData(symbol);
+    }, 3000);
 }
 
-/* ---------------------- SMC + BOS + CHoCH ---------------------- */
-function drawSMC(c) {
-    for (let i = 2; i < c.length; i++) {
-        let p = c[i - 1];
-        let cur = c[i];
-
-        if (cur.high > p.high && cur.low > p.low) {
-            candleSeries.setMarkers([{
-                time: cur.time,
-                position: 'aboveBar',
-                color: 'yellow',
-                shape: 'arrowUp',
-                text: 'HH'
-            }]);
-        }
-
-        if (cur.low < p.low && cur.high < p.high) {
-            candleSeries.setMarkers([{
-                time: cur.time,
-                position: 'belowBar',
-                color: 'yellow',
-                shape: 'arrowDown',
-                text: 'LL'
-            }]);
-        }
-    }
-}
-
-/* ---------------------- DEFAULT LOAD ---------------------- */
+// Initial
 loadSymbol("XAUUSD");
+
+// -------- BASE FETCH FUNCTION (PART 2 will replace) --------
+async function fetchData(symbol){
+    // Placeholder — PART 2 me full ICT logic add hoga
+    console.log("Data fetch ho gaya:", symbol);
+
+    clearOverlay();
+    drawTestLine(); // test — to verify overlay is working
+}
+
+// Canvas cleaner
+function clearOverlay(){
+    ctx.clearRect(0,0,overlayCanvas.width, overlayCanvas.height);
+}
+
+// Temporary test — check overlay working
+function drawTestLine(){
+    ctx.strokeStyle = "lime";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(20,20);
+    ctx.lineTo(200,200);
+    ctx.stroke();
+}
 
 </script>
 </body>
