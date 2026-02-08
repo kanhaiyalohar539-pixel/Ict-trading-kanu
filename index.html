@@ -1,159 +1,223 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ICT Auto Chart</title>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ICT Auto Chart</title>
 
-    <style>
-        body {
-            margin: 0;
-            background: #000;
-            color: white;
-            font-family: Arial;
-        }
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 
-        .top {
-            padding: 10px;
-            background: #111;
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-        }
+<style>
+    body {
+        margin: 0;
+        font-family: Arial;
+        background: #000;
+        color: white;
+    }
 
-        button {
-            padding: 8px 14px;
-            color: white;
-            background: #000;
-            border: 1px solid #444;
-            border-radius: 5px;
-        }
+    .top {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px;
+        background: #111;
+        flex-wrap: wrap;
+    }
 
-        #chart {
-            width: 100%;
-            height: calc(100vh - 70px);
-        }
-    </style>
+    button {
+        background: #000;
+        color: white;
+        border: 1px solid #444;
+        padding: 8px 14px;
+        border-radius: 5px;
+    }
+
+    #chart {
+        width: 100%;
+        height: calc(100vh - 70px);
+    }
+</style>
 </head>
+
 <body>
 
 <div class="top">
-    <button onclick="loadData('XAUUSD')">XAU/USD</button>
-    <button onclick="loadData('XAGUSD')">XAG/USD</button>
-    <button onclick="loadData('BTCUSDT')">BTC</button>
-    <button onclick="loadData('ETHUSDT')">ETH</button>
+    <button onclick="loadSymbol('XAUUSD')">XAU/USD</button>
+    <button onclick="loadSymbol('XAGUSD')">XAG/USD</button>
+    <button onclick="loadSymbol('BTCUSDT')">BTC</button>
+    <button onclick="loadSymbol('ETHUSDT')">ETH</button>
 </div>
 
 <div id="chart"></div>
 
 <script>
-    let chart = LightweightCharts.createChart(document.getElementById('chart'), {
-        layout: { background: { color: "#000" }, textColor: "#fff" },
-        grid: { vertLines: { color: "#222" }, horzLines: { color: "#222" } },
-        timeScale: { timeVisible: true, secondsVisible: false }
-    });
+/* ---------------------- AUTO THEME ---------------------- */
+function getTheme() {
+    let hour = new Date().getHours();
+    return (hour >= 7 && hour <= 18) ? "light" : "dark";
+}
 
-    let candleSeries = chart.addCandlestickSeries();
-    let fvgBoxes = [];
-    let orderBlocks = [];
-    let liquidityLines = [];
+let chart = LightweightCharts.createChart(document.getElementById('chart'), {
+    layout: {
+        background: { color: getTheme() === "dark" ? "#000" : "#fff" },
+        textColor: getTheme() === "dark" ? "#fff" : "#000",
+    },
+    grid: {
+        vertLines: { color: "#222" },
+        horzLines: { color: "#222" }
+    },
+    timeScale: { timeVisible: true, secondsVisible: false }
+});
 
-    async function loadData(symbol) {
+let candleSeries = chart.addCandlestickSeries();
+
+/* ---------------------- LOAD DATA ---------------------- */
+async function loadSymbol(symbol) {
+    let candles = [];
+
+    if (symbol === "BTCUSDT" || symbol === "ETHUSDT") {
         const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=15m&limit=500`;
-        const data = await fetch(url).then(r => r.json());
-
-        let candles = data.map(c => ({
+        const raw = await fetch(url).then(r => r.json());
+        candles = raw.map(c => ({
             time: c[0] / 1000,
             open: +c[1],
             high: +c[2],
             low: +c[3],
             close: +c[4]
         }));
-
-        candleSeries.setData(candles);
-
-        detectFVG(candles);
-        detectOrderBlocks(candles);
-        drawLiquidity(candles);
-    }
-
-    /* ---------------- AUTO FVG ---------------- */
-    function detectFVG(c) {
-        fvgBoxes.forEach(b => chart.removeShape(b));
-        fvgBoxes = [];
-
-        for (let i = 2; i < c.length; i++) {
-            let A = c[i-2], B = c[i-1], C = c[i];
-
-            if (A.high < C.low) {
-                let box = chart.addShape({
-                    shape: 'box',
-                    points: [{ time: A.time, price: A.high }, { time: C.time, price: C.low }],
-                    color: "rgba(0,255,0,0.2)",
-                    edgeColor: "green"
-                });
-                fvgBoxes.push(box);
-            }
-
-            if (A.low > C.high) {
-                let box = chart.addShape({
-                    shape: 'box',
-                    points: [{ time: A.time, price: A.low }, { time: C.time, price: C.high }],
-                    color: "rgba(255,0,0,0.2)",
-                    edgeColor: "red"
-                });
-                fvgBoxes.push(box);
-            }
-        }
-    }
-
-    /* ---------------- AUTO ORDER BLOCK ---------------- */
-    function detectOrderBlocks(c) {
-        orderBlocks.forEach(b => chart.removeShape(b));
-        orderBlocks = [];
-
-        for (let i = 1; i < c.length; i++) {
-            let prev = c[i - 1];
-            let cur = c[i];
-
-            if (prev.close > prev.open && cur.close < cur.open) {
-                let box = chart.addShape({
-                    shape: 'box',
-                    points: [{ time: prev.time, price: prev.low }, { time: cur.time, price: prev.high }],
-                    color: "rgba(255,165,0,0.2)",
-                    edgeColor: "orange"
-                });
-                orderBlocks.push(box);
-            }
-        }
-    }
-
-    /* ---------------- AUTO LIQUIDITY ---------------- */
-    function drawLiquidity(c) {
-        liquidityLines.forEach(l => chart.removeShape(l));
-        liquidityLines = [];
-
-        let highs = c.map(x => x.high);
-        let lows = c.map(x => x.low);
-        let eqh = Math.max(...highs);
-        let eql = Math.min(...lows);
-
-        liquidityLines.push(chart.addShape({
-            shape: "line",
-            points: [{ time: c[0].time, price: eqh }, { time: c[c.length-1].time, price: eqh }],
-            color: "cyan"
-        }));
-
-        liquidityLines.push(chart.addShape({
-            shape: "line",
-            points: [{ time: c[0].time, price: eql }, { time: c[c.length-1].time, price: eql }],
-            color: "magenta"
+    } 
+    else {
+        const url = "https://financialmodelingprep.com/api/v3/historical-chart/15min/" 
+                    + (symbol === "XAUUSD" ? "XAUUSD" : "XAGUSD") 
+                    + "?apikey=demo";
+        const raw = await fetch(url).then(r => r.json());
+        candles = raw.reverse().map(c => ({
+            time: Math.floor(new Date(c.date).getTime() / 1000),
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close
         }));
     }
 
-    loadData("XAUUSD");
+    candleSeries.setData(candles);
+    drawFVG(candles);
+    drawOrderBlocks(candles);
+    drawLiquidity(candles);
+    drawSMC(candles);
+}
+
+/* ---------------------- AUTO FVG ---------------------- */
+function drawFVG(c) {
+    for (let i = 2; i < c.length; i++) {
+        let A = c[i-2], B = c[i-1], C = c[i];
+
+        // Bullish FVG
+        if (A.high < C.low) {
+            candleSeries.setMarkers([{
+                time: C.time,
+                position: 'aboveBar',
+                color: 'lime',
+                shape: 'circle',
+                text: 'FVG↑'
+            }]);
+        }
+
+        // Bearish FVG
+        if (A.low > C.high) {
+            candleSeries.setMarkers([{
+                time: C.time,
+                position: 'belowBar',
+                color: 'red',
+                shape: 'circle',
+                text: 'FVG↓'
+            }]);
+        }
+    }
+}
+
+/* ---------------------- ORDER BLOCK ---------------------- */
+function drawOrderBlocks(c) {
+    for (let i = 1; i < c.length; i++) {
+        let prev = c[i - 1];
+        let cur = c[i];
+
+        if (prev.close > prev.open && cur.close < cur.open) {
+            // Bearish OB
+            candleSeries.setMarkers([{
+                time: cur.time,
+                position: 'belowBar',
+                color: 'orange',
+                shape: 'square',
+                text: 'OB↓'
+            }]);
+        }
+
+        if (prev.close < prev.open && cur.close > cur.open) {
+            // Bullish OB
+            candleSeries.setMarkers([{
+                time: cur.time,
+                position: 'aboveBar',
+                color: 'cyan',
+                shape: 'square',
+                text: 'OB↑'
+            }]);
+        }
+    }
+}
+
+/* ---------------------- LIQUIDITY ---------------------- */
+function drawLiquidity(c) {
+    let highs = c.map(x => x.high);
+    let lows = c.map(x => x.low);
+
+    let eqh = Math.max(...highs);
+    let eql = Math.min(...lows);
+
+    chart.addHorizontalLine(eqh, {
+        color: "cyan",
+        lineWidth: 2,
+        lineStyle: 2
+    });
+
+    chart.addHorizontalLine(eql, {
+        color: "magenta",
+        lineWidth: 2,
+        lineStyle: 2
+    });
+}
+
+/* ---------------------- SMC + BOS + CHoCH ---------------------- */
+function drawSMC(c) {
+    for (let i = 2; i < c.length; i++) {
+        let p = c[i - 1];
+        let cur = c[i];
+
+        if (cur.high > p.high && cur.low > p.low) {
+            candleSeries.setMarkers([{
+                time: cur.time,
+                position: 'aboveBar',
+                color: 'yellow',
+                shape: 'arrowUp',
+                text: 'HH'
+            }]);
+        }
+
+        if (cur.low < p.low && cur.high < p.high) {
+            candleSeries.setMarkers([{
+                time: cur.time,
+                position: 'belowBar',
+                color: 'yellow',
+                shape: 'arrowDown',
+                text: 'LL'
+            }]);
+        }
+    }
+}
+
+/* ---------------------- DEFAULT LOAD ---------------------- */
+loadSymbol("XAUUSD");
+
 </script>
-
 </body>
 </html>
