@@ -30,19 +30,31 @@
         border-radius: 5px;
     }
 
+    /* --- MAIN FIX --- */
     #tvchart {
+        position: relative;
         width: 100%;
         height: calc(100vh - 70px);
-        position: relative;
+        overflow: hidden;
+    }
+
+    #tradingview_chart {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
     }
 
     #overlayCanvas {
         position: absolute;
-        top: 0; 
+        top: 0;
         left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none; /* important! */
+        width: 100% !important;
+        height: 100% !important;
+        pointer-events: none;
+        z-index: 999999; /* overlay sabse upar */
+        background: transparent;
     }
 </style>
 </head>
@@ -57,7 +69,7 @@
 </div>
 
 <div id="tvchart">
-    <div id="tradingview_chart" style="width:100%; height:100%"></div>
+    <div id="tradingview_chart"></div>
     <canvas id="overlayCanvas"></canvas>
 </div>
 
@@ -83,7 +95,6 @@ function resizeCanvas() {
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
-
 // -------- LOAD SYMBOL ON TRADINGVIEW --------
 function loadSymbol(symbol){
     let theme = autoTheme();
@@ -103,36 +114,35 @@ function loadSymbol(symbol){
         "container_id": "tradingview_chart"
     });
 
-    // After chart loads → call data engine
+    // After chart loads → call ICT data engine
     setTimeout(() => {
         fetchData(symbol);
     }, 3000);
 }
 
-// Initial
+// Default
 loadSymbol("XAUUSD");
 
-// -------- BASE FETCH FUNCTION (PART 2 will replace) --------
+// -------- BASE FETCH FUNCTION (ICT logic PART 2 me add hoga) --------
 async function fetchData(symbol){
-    // Placeholder — PART 2 me full ICT logic add hoga
-    console.log("Data fetch ho gaya:", symbol);
+    console.log("Data fetch ready:", symbol);
 
     clearOverlay();
-    drawTestLine(); // test — to verify overlay is working
+    drawTestLine(); // test — overlay working check
 }
 
-// Canvas cleaner
+// Clear overlay
 function clearOverlay(){
     ctx.clearRect(0,0,overlayCanvas.width, overlayCanvas.height);
 }
 
-// Temporary test — check overlay working
+// TEMP TEST OVERLAY (green line)
 function drawTestLine(){
     ctx.strokeStyle = "lime";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(20,20);
-    ctx.lineTo(200,200);
+    ctx.moveTo(40,40);
+    ctx.lineTo(250,250);
     ctx.stroke();
 }
 
